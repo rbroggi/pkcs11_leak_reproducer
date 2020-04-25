@@ -1,20 +1,34 @@
+#include <hsm/HSMUtils.h>
 #include <iostream>
-#include "hsm/HSMUtils.h"
 
 int main() {
 
   // opening dl
-  auto libResult = HSMUtils::openHSMDL("/usr/local/lib/softhsm/libsofthsm2.so");
-  if (libResult.first && libResult.second) {
+  auto [lib, libFunc] = HSMUtils::openHSMDL("/usr/local/lib/softhsm/libsofthsm2.so");
+  if (lib && libFunc) {
     std::cout << "Lib was loaded!" << std::endl;
   } else {
     std::cout << "Lib not loaded!" << std::endl;
   }
 
-  auto aSession = HSMUtils::openSession(libResult.second, "FKK");
-  if (!aSession) {
+  // opening session
+  auto aSession = HSMUtils::openSession(libFunc, "FKH");
+  if (not aSession) {
     std::cout << "Could not open session." << std::endl;
+    return 1;
   }
+
+  // login to session
+  if (not HSMUtils::login(libFunc, aSession.value(), "1234")) {
+    auto isSessionClosed = HSMUtils::closeSession(libFunc, aSession.value());
+    auto isClosed        = HSMUtils::closeHSMDL(lib, libFunc);
+    std::cout << "Could not login into session." << std::endl;
+    return 2;
+  }
+
+  // create key inside
+
+  std::cout << "Login successful." << std::endl;
 
   return 0;
 }

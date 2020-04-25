@@ -13,12 +13,6 @@
 
 using namespace std::string_literals;
 
-// trim from start (in place)
-static inline void ltrim(std::string &s) {
-  s.erase(s.begin(), std::find_if(s.begin(), s.end(),
-                                  std::not1(std::ptr_fun<int, int>(std::isspace))));
-}
-
 void TRC_ERROR(int error, const std::string& err) {
   std::cout << error << err;
 }
@@ -197,7 +191,10 @@ std::optional<CK_SESSION_HANDLE> HSMUtils::openSession(CK_FUNCTION_LIST_PTR iLib
     }
 
     std::string aSlotLabel = std::string(reinterpret_cast<char*>(aTokenInfo.label), sizeof(aTokenInfo.label));
-    remove_if(aSlotLabel.begin(), aSlotLabel.end(), isspace);
+    aSlotLabel.erase(std::remove_if(aSlotLabel.begin(),
+                                    aSlotLabel.end(),
+                                    [](unsigned char x) { return std::isspace(x); }),
+                     aSlotLabel.end());
     /*
      * Open session on the slot
      */

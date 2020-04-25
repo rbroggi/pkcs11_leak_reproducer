@@ -61,9 +61,7 @@ RUN git clone --branch ${SOFTHSMV} https://github.com/opendnssec/SoftHSMv2.git &
 		./configure --disable-gost && \
 		make && \
 		make install && \
-		export SOFTHSM2_CONF=/etc/softhsm2.conf && \
-		softhsm2-util --init-token --slot 0 --label "FKX" --pin 1234 --so-pin 0000 && \
-		softhsm2-util --init-token --slot 1 --label "FKH" --pin 1234 --so-pin 0000
+		export SOFTHSM2_CONF=/etc/softhsm2.conf
 
 
 # Config for clion to run
@@ -79,5 +77,6 @@ RUN useradd -m user \
   && yes password | passwd user
 
 RUN echo 'export SOFTHSM2_CONF=/etc/softhsm2.conf' >> /home/user/.profile
+RUN su - user -c "softhsm2-util --init-token --slot 0 --label "FKH" --pin 1234 --so-pin 0000"
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
