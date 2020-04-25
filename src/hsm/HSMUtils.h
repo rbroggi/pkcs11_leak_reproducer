@@ -5,8 +5,9 @@
 #pragma once
 
 #include "hsm/cryptoki.h"
-#include <tuple>
 #include <optional>
+#include <tuple>
+#include <vector>
 
 /**
  * Utils used for interface with HSM
@@ -67,5 +68,13 @@ class HSMUtils {
    *  empty optional if there is a search error or if no key is found
    */
   static std::optional<CK_OBJECT_HANDLE> retrieveKeyHandle(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, const std::string& iKeyLabel);
+
+
+  static std::optional<CK_OBJECT_HANDLE> generateKey(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, const std::string& iKeyLabel);
+
+  static std::optional<std::vector<unsigned char>> encrypt_aes(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, CK_OBJECT_HANDLE iKeyHandle,  const std::vector<unsigned char>& iPlainText);
+
+  static std::optional<std::vector<unsigned char>> decrypt_aes(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, CK_OBJECT_HANDLE iKeyHandle,  const std::vector<unsigned char>& iCipherText);
+
 
 };

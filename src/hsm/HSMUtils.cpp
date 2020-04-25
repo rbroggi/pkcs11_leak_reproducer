@@ -9,9 +9,16 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <random>
 
 
 using namespace std::string_literals;
+
+constexpr const std::size_t K_IV_SIZE = 16u;
+constexpr const std::size_t K_TAG_SIZE = 16u;
+// authentication array
+std::vector<unsigned char> gcmAAD = { 0xFE, 0xED, 0xFA, 0xCE, 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED,
+                                      0xFA, 0xCE, 0xDE, 0xAD, 0xBE, 0xEF, 0xAB, 0xAD, 0xDA, 0xD2 };
 
 void TRC_ERROR(int error, const std::string& err) {
   std::cout << error << err;
@@ -200,7 +207,7 @@ std::optional<CK_SESSION_HANDLE> HSMUtils::openSession(CK_FUNCTION_LIST_PTR iLib
      */
     if (aSlotLabel == iSlotLabel) {
 
-      const CK_FLAGS aSessionFlags = CKF_SERIAL_SESSION;
+      const CK_FLAGS aSessionFlags = CKF_SERIAL_SESSION | CKF_RW_SESSION;
       CK_SESSION_HANDLE aSession;
       aStatus = iLibInterface->C_OpenSession(aSlotId, aSessionFlags, 0, 0, &aSession);
       if (aStatus != CKR_OK) {
@@ -247,3 +254,166 @@ bool HSMUtils::closeSession(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDL
   return true;
 }
 
+std::optional<CK_OBJECT_HANDLE> HSMUtils::generateKey(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, const std::string& iKeyLabel) {
+  CK_MECHANISM mechanism = {
+      CKM_AES_KEY_GEN, nullptr, 0};
+
+  std::vector<CK_BYTE> keyLabel(iKeyLabel.begin(), iKeyLabel.end());
+
+  static CK_OBJECT_CLASS KeyClass = CKO_SECRET_KEY;
+  static CK_KEY_TYPE KeyType = CKK_AES;
+  static CK_ULONG KeyLen = 32;
+  static CK_BBOOL bTrue = true;
+  static CK_BBOOL bFalse = true;
+
+  std::vector<CK_ATTRIBUTE> attrs = {
+      {CKA_CLASS, &KeyClass, sizeof(KeyClass)},
+      {CKA_TOKEN, &bTrue, sizeof(bTrue)},
+      {CKA_PRIVATE, &bTrue, sizeof(bTrue)},
+      {CKA_LABEL, keyLabel.data(), keyLabel.size()},
+      {CKA_ID, keyLabel.data(), keyLabel.size()},
+      {CKA_MODIFIABLE, &bFalse, sizeof(bFalse)},
+      {CKA_KEY_TYPE, &KeyType, sizeof(KeyType)},
+      {CKA_ENCRYPT, &bTrue, sizeof(bTrue)},
+      {CKA_DECRYPT, &bTrue, sizeof(bTrue)},
+      {CKA_VALUE_LEN, &KeyLen, sizeof(KeyLen)}
+  };
+
+  CK_OBJECT_HANDLE aKey;
+  CK_RV aStatus = iLibInterface->C_GenerateKey(iSession, &mechanism, attrs.data(), attrs.size(), &aKey);
+  if (aStatus != CKR_OK) {
+    std::ostringstream aErrorMsg;
+    aErrorMsg << "Error while calling C_GenerateKey: 0x" << std::hex << aStatus;
+    TRC_ERROR(255,  aErrorMsg.str());
+    return {};
+  }
+  return {aKey};
+}
+
+std::optional<std::vector<unsigned char>> HSMUtils::encrypt_aes(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, CK_OBJECT_HANDLE iKeyHandle, const std::vector<unsigned char> &iPlainText) {
+
+  if (not iLibInterface) {
+    TRC_ERROR(255, "Cannot encrypt due to empty lib iLibInterface interface");
+    return {};
+  }
+
+  // Set up GCM params: IV, AAD,
+
+  // Creating a random IV
+  std::vector<unsigned char> gcmIV(K_IV_SIZE, 0x00);
+  std::random_device rd;
+  std::uniform_int_distribution<unsigned char> dist(0x00,0xFF);
+  std::for_each(gcmIV.begin(), gcmIV.end(), [& dist = dist, &gen = rd](auto& el) { el = dist(gen); });
+
+  CK_AES_GCM_PARAMS gcmParams = {
+      &gcmIV.front(), gcmIV.size(), gcmIV.size() * 8u, &gcmAAD.front(), gcmAAD.size(), K_TAG_SIZE * 8u
+  };
+
+  CK_MECHANISM aMech = { CKM_AES_GCM, &gcmParams, sizeof(CK_AES_GCM_PARAMS) };
+
+  CK_RV rv = iLibInterface->C_EncryptInit(iSession, &aMech, iKeyHandle);
+  if (rv != CKR_OK) {
+    std::stringstream descr;
+    descr << "Failed in C_EncryptInit, return value: " << std::hex << rv;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+
+  // Determine how much memory is required to store the ciphertext.
+  CK_ULONG aCipherTextLength = 0;
+  rv =
+      iLibInterface->C_Encrypt(iSession, (CK_BYTE_PTR)&iPlainText.front(), iPlainText.size(), nullptr, &aCipherTextLength);
+  if (rv != CKR_OK) {
+    std::stringstream descr;
+    descr << "Failed in C_Encrypt size, return value: " << std::hex << rv;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+
+  // size ciphertext to contain enough space to prepended IV + cipheredtext
+  std::vector<unsigned char> aCipherText(gcmIV);
+  aCipherText.resize(gcmIV.size() + aCipherTextLength);
+  // Start to write ciphertext to iv lenght in order to have IV prepended
+  rv = iLibInterface->C_Encrypt(iSession,
+                             (CK_BYTE_PTR)&iPlainText.front(),
+                             iPlainText.size(),
+                             &aCipherText[gcmIV.size()],
+                             &aCipherTextLength);
+  if (rv != CKR_OK) {
+    std::ostringstream descr;
+    descr << "Failed in C_Encrypt, return value: " << std::hex << rv;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+  // Guaranteeing that the cipherlenght is still what promised before
+  aCipherText.resize(gcmIV.size() + aCipherTextLength);
+
+  return {  aCipherText };
+}
+std::optional<std::vector<unsigned char>> HSMUtils::decrypt_aes(CK_FUNCTION_LIST_PTR iLibInterface, CK_SESSION_HANDLE iSession, CK_OBJECT_HANDLE iKeyHandle, const std::vector<unsigned char> &iCipherText) {
+
+  if (iLibInterface == nullptr) {
+    TRC_ERROR(255, "Cannot decrypt due to empty lib iLibInterface interface");
+    return {};
+  }
+
+  // cipher text should be at least as big as IV size plus gcmAAD size
+  if (iCipherText.size() < (K_IV_SIZE + K_TAG_SIZE)) {
+    std::ostringstream descr;
+    descr << "Cipher text should be at least as big as IV size plus TAG size."
+          << " IV size: " << K_IV_SIZE
+          << "; TAG size: " << K_TAG_SIZE;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+
+  // Set up GCM params: IV, AAD,
+
+  // Retrieving IV from the iCipherText
+  std::vector<unsigned char> gcmIV(iCipherText.begin(), iCipherText.begin() + K_IV_SIZE);
+
+  CK_AES_GCM_PARAMS gcmParams = {
+      &gcmIV.front(), gcmIV.size(), gcmIV.size() * 8u, &gcmAAD.front(), gcmAAD.size(), K_TAG_SIZE * 8u
+  };
+
+  CK_MECHANISM aMech = { CKM_AES_GCM, &gcmParams, sizeof(CK_AES_GCM_PARAMS) };
+
+  CK_RV rv = iLibInterface->C_DecryptInit(iSession, &aMech, iKeyHandle);
+  if (rv != CKR_OK) {
+    std::stringstream descr;
+    descr << "Failed in C_DecryptInit, return value: " << std::hex << rv;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+
+  // Determine how much memory is required to store the plaintext.
+  CK_ULONG aPlainTextLength = 0;
+  rv = iLibInterface->C_Decrypt(iSession, (CK_BYTE_PTR)&iCipherText[K_IV_SIZE], iCipherText.size() - K_IV_SIZE, nullptr, &aPlainTextLength);
+  if (rv != CKR_OK) {
+    std::stringstream descr;
+    descr << "Failed in C_Decrypt size, return value: " << std::hex << rv;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+
+  // reserve size on plaintext to contain enough space to prepended IV + cipheredtext
+  std::vector<unsigned char> aPlainText;
+  aPlainText.resize(aPlainTextLength);
+  // Start to write ciphertext to iv lenght in order to have IV prepended
+  rv = iLibInterface->C_Decrypt(iSession,
+                             (CK_BYTE_PTR)&iCipherText[K_IV_SIZE],
+                             iCipherText.size() - K_IV_SIZE,
+                             &aPlainText.front(),
+                             &aPlainTextLength);
+  if (rv != CKR_OK) {
+    std::ostringstream descr;
+    descr << "Failed in C_Decrypt, return value: " << std::hex << rv;
+    TRC_ERROR(255, descr.str());
+    return {};
+  }
+
+  // Guaranteeing that the cipherlenght is still what promised before
+  aPlainText.resize(aPlainTextLength);
+
+  return { aPlainText };
+}
