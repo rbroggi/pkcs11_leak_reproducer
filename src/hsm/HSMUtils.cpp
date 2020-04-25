@@ -197,7 +197,7 @@ std::optional<CK_SESSION_HANDLE> HSMUtils::openSession(CK_FUNCTION_LIST_PTR iLib
     }
 
     std::string aSlotLabel = std::string(reinterpret_cast<char*>(aTokenInfo.label), sizeof(aTokenInfo.label));
-    ltrim(aSlotLabel);
+    remove_if(aSlotLabel.begin(), aSlotLabel.end(), isspace);
     /*
      * Open session on the slot
      */
