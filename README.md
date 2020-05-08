@@ -34,7 +34,7 @@ make
 ```
 Run the program using valgrind giving the following arguments: `"<path_to_the_lib>" "<token_slot_label>" "<token_slot_pwd>" ` 
 ```bash
-valgrind --tool=memcheck --xml=yes --xml-file=/tmp/valgrind --gen-suppressions=all --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no ./pkcs11_leak_reproducer "<path_to_the_lib>" "<token_slot_label>" "<token_slot_pwd>" 
+valgrind --tool=memcheck --log-file=/tmp/valgrind --gen-suppressions=all --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no ./pkcs11_leak_reproducer "<path_to_the_lib>" "<token_slot_label>" "<token_slot_pwd>" 
 ```
 Check the result in file: `/tmp/valgrind`
 
@@ -51,7 +51,7 @@ cd pkcs11_leak_reproducer
 ```
 Build the image:
 ```bash
-docker build -t thales-case-minimal -f Dockerfile.minimal .
+docker build -t thales-case-minimal -f Dockerfile .
 ```
 Run the image:
 ```bash

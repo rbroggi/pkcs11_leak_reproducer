@@ -47,6 +47,11 @@ RUN cd /root/pkcs11_leak_reproducer && \
 RUN apt-get update && apt-get install -y valgrind
 
 # If you want to run it with valgrind simply change the last command to fit:
-CMD cd /root/pkcs11_leak_reproducer/build && /usr/bin/valgrind --tool=memcheck --xml=yes --xml-file=/tmp/valgrind --gen-suppressions=all --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no ./pkcs11_leak_reproducer "/usr/local/lib/softhsm/libsofthsm2.so" "FKH" "1234" && cat /tmp/valgrind
+CMD cd /root/pkcs11_leak_reproducer/build && \
+    /usr/bin/valgrind --tool=memcheck --log-file=/tmp/valgrind \
+    --gen-suppressions=all --leak-check=full \
+    --leak-resolution=med --track-origins=yes --vgdb=no \
+    ./pkcs11_leak_reproducer "/usr/local/lib/softhsm/libsofthsm2.so" "FKH" "1234" && \
+    cat /tmp/valgrind
 
 
