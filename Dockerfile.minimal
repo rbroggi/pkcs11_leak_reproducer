@@ -36,13 +36,17 @@ ENV SOFTHSM2_CONF=/etc/softhsm2.conf
 # configuring HSM slot
 RUN softhsm2-util --init-token --slot 0 --label "FKH" --pin 1234 --so-pin 0000
 
-COPY . /root/soft_hsm_cpp
+COPY . /root/pkcs11_leak_reproducer
 
-RUN cd /root/soft_hsm_cpp && \
+RUN cd /root/pkcs11_leak_reproducer && \
     cmake -G "Unix Makefiles" ./ -B./build && \
     cd build && \
     make
 
-CMD cd /root/soft_hsm_cpp/build && ./soft_hsm_cpp
+# Install valgrind
+RUN apt-get update && apt-get install -y valgrind
+
+# If you want to run it with valgrind simply change the last command to fit:
+CMD cd /root/pkcs11_leak_reproducer/build && /usr/bin/valgrind --tool=memcheck --xml=yes --xml-file=/tmp/valgrind --gen-suppressions=all --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no ./pkcs11_leak_reproducer "/usr/local/lib/softhsm/libsofthsm2.so" "FKH" "1234" && cat /tmp/valgrind
 
 

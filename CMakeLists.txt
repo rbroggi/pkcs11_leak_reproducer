@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(soft_hsm_cpp)
+project(pkcs11_leak_reproducer)
 
 set(CMAKE_CXX_STANDARD 17)
 
 include_directories(src/)
 
-add_executable(soft_hsm_cpp
+add_executable(pkcs11_leak_reproducer
         src/hsm/HSMUtils.cpp
         src/main.cpp
         )
@@ -14,6 +14,6 @@ add_executable(soft_hsm_cpp
 # TODO:  Is this workaround really necessary?
 find_library( DL_LIBRARY libdl.so  )
 
-target_link_libraries(soft_hsm_cpp
+target_link_libraries(pkcs11_leak_reproducer
         ${DL_LIBRARY}
         )

@@ -11,5 +11,5 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Build and run the Docker image
-      run: docker build . --file Dockerfile.minimal --tag soft_hsm_cpp && docker run soft_hsm_cpp
+      run: docker build . --file Dockerfile.minimal --tag pkcs11_leak_reproducer && docker run pkcs11_leak_reproducer
 

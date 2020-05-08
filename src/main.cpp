@@ -5,10 +5,31 @@
 
 using namespace std::string_literals;
 
-int main() {
+int main(int argc, char** argv) {
+
+  // default argument one - lib path
+  std::string aLibPath = "/usr/local/lib/softhsm/libsofthsm2.so";
+  if (argc > 1) {
+    aLibPath = argv[1];
+    std::cout << "custom lib path: " << aLibPath << std::endl;
+  }
+
+  // default slot label
+  std::string aSlotLabel = "FKH";
+  if (argc > 2) {
+    aSlotLabel = argv[2];
+    std::cout << "custom Slot label: " << aSlotLabel << std::endl;
+  }
+  
+  // default slot pwd
+  std::string aSlotPwd = "1234";
+  if (argc > 3) {
+    aSlotPwd = argv[3];
+    std::cout << "custom Slot pwd: " << aSlotPwd << std::endl;
+  }
 
   // opening dl
-  auto [lib, libFunc] = HSMUtils::openHSMDL("/usr/local/lib/softhsm/libsofthsm2.so");
+  auto [lib, libFunc] = HSMUtils::openHSMDL(aLibPath);
   if (lib && libFunc) {
     std::cout << "Lib was loaded!" << std::endl;
   } else {
@@ -16,14 +37,14 @@ int main() {
   }
 
   // opening session
-  auto aSession = HSMUtils::openSession(libFunc, "FKH");
+  auto aSession = HSMUtils::openSession(libFunc, aSlotLabel);
   if (not aSession) {
     std::cout << "Could not open session." << std::endl;
     return 1;
   }
 
   // login to session
-  if (not HSMUtils::login(libFunc, aSession.value(), "1234")) {
+  if (not HSMUtils::login(libFunc, aSession.value(), aSlotPwd)) {
     auto isSessionClosed = HSMUtils::closeSession(libFunc, aSession.value());
     auto isClosed        = HSMUtils::closeHSMDL(lib, libFunc);
     std::cout << "Could not login into session." << std::endl;

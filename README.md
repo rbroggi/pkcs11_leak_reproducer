@@ -1,38 +1,60 @@
-## Software HSM and c++ 
+## A PKCS11 lib valgrind leak report reproducer
 
-In this small repo the idea is to demo how to use SoftHSM from cpp as a substitute of a real hsm modulo.
-The main things to understand are:
+In this small repo the idea is to provide a reproducer to a valgrind leak report when using a PKCS11 library.
+The code does: 
+1. Uses the pkcs11-lib `dlopen`-ing it;
+1. Uses the credentials passed in the command line to create a session to a provided slotLabel also provided in the command line;
+1. Generates a private AES key in the HSM;
+1. Uses this private key to encrypt/decrypt a payload using AES_GCM mechanism;
+1. Check that the Decrypted payload is equal to the original;
 
-1. The softHSM is configured during the `Dockerfile.minimal` build;
-2. The cpp code does: 
-    1. Connect to the SoftHSM through a binary which is `dlopen`-ed;
-    1. Uses the credentials configured in 1. to create a session;
-    1. Generates a private AES key in the HSM;
-    1. Uses this private key to encrypt/decrypt a payload using AES_GCM mechanism;
-    1. Check that the Decrypted payload is equal to the original;
+Below you will find how to:
+1. compile the c++ code;
+2. run it using an existing library installation; 
+3. run a Docker container that packs a SoftHSMv2 installation as to provide a benchmark where no leaks are present;
 
-This repo packs also a `Dockerfile` which installs many dependencies that are not directly linked to this project,
-it's only a convenience image for cpp remote development (bundles several cpp tools and toolchains along with 
-bare minimum products needed by this software). 
+### Compilation of cpp code:
 
-* [SoftHSM](https://github.com/opendnssec/SoftHSMv2) - A software implementation of a Hardware Security Module;
+Before continuing with the compilation, make sure you have installed in your system the following dependencies:
 
-The only dependency for this repo to work is docker. For a better overview of the software used please refer to the specific Dockerfiles.
+* [cmake](https://cmake.org/)
+* A modern cpp compiler ([gcc](https://gcc.gnu.org/), [clang](https://clang.llvm.org/), etc...) featuring cpp17 support
+* [valgrind](http://valgrind.org/)
 
-## Usage
-
-1. Clone the repo and jump into the repo directory:
+Clone the repo and jump into the repo directory:
 ```bash
-git clone https://github.com/rbroggi/soft_hsm_cpp.git
-cd soft_hsm_cpp
+git clone https://github.com/rbroggi/pkcs11_leak_reproducer.git
+cd pkcs11_leak_reproducer
 ```
-2. Build the image:
+Run [cmake](https://cmake.org/) and make for build of the program;
 ```bash
-docker build -t softhsm-minimal -f Dockerfile.minimal .
+cmake -G "Unix Makefiles" ./ -B./build && \
+cd build && \
+make
 ```
-3. Run the image:
+Run the program using valgrind giving the following arguments: `"<path_to_the_lib>" "<token_slot_label>" "<token_slot_pwd>" ` 
 ```bash
-docker run softhsm-minimal
+valgrind --tool=memcheck --xml=yes --xml-file=/tmp/valgrind --gen-suppressions=all --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no ./pkcs11_leak_reproducer "<path_to_the_lib>" "<token_slot_label>" "<token_slot_pwd>" 
 ```
+Check the result in file: `/tmp/valgrind`
 
+### Build and run Dockerfile 
+
+Benchmark results using SoftHSM Docker installation. You can either 
+run the commands below on your system or simply check the github action
+under this repo to see the results.
+
+Clone the repo and jump into the repo directory:
+```bash
+git clone https://github.com/rbroggi/pkcs11_leak_reproducer.git
+cd pkcs11_leak_reproducer
+```
+Build the image:
+```bash
+docker build -t thales-case-minimal -f Dockerfile.minimal .
+```
+Run the image:
+```bash
+docker run thales-case-minimal
+```
 
